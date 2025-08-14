@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>DeWalt Forever</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Condensed:wght@700&family=Press+Start+2P&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; background-color: #1a202c;
+        }
+        canvas {
+            display: block; background: #4a5568; touch-action: none; transition: background-color 0.5s;
+        }
+        .ui-layer {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; color: white; display: flex;
+            flex-direction: column; align-items: center;
+        }
+        .info-panel {
+            margin-top: 30px; font-family: 'Press Start 2P', cursive;
+            color: #FFD700; font-size: 1.5rem; text-shadow: 3px 3px #000; z-index: 10;
+        }
+        .lives-panel {
+            margin-top: 5px; font-size: 2rem; text-shadow: 2px 2px #000; z-index: 10;
+        }
+        .active-bonuses-container {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 20px;
+            z-index: 10;
+        }
+        .bonus-indicator {
+            width: 80px; height: 80px; background-color: rgba(0, 0, 0, 0.6);
+            border: 4px solid #FFD700; border-radius: 50%; display: flex;
+            justify-content: center; align-items: center; position: relative;
+            box-shadow: 0 0 15px rgba(255, 215, 0, 0.7);
+        }
+        .bonus-indicator svg { width: 50px; height: 50px; }
+        .message-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.7); display: flex; flex-direction: column;
+            justify-content: center; align-items: center; text-align: center;
+            z-index: 20; pointer-events: auto; padding: 1rem;
+        }
+        .message-overlay h2 {
+            font-family: 'Press Start 2P', cursive; font-size: clamp(2rem, 8vw, 3.5rem);
+            color: #FFD700; margin-bottom: 1rem;
+        }
+        .message-overlay p {
+             font-family: 'Roboto Condensed', sans-serif; font-size: clamp(1rem, 4vw, 1.5rem);
+             margin-bottom: 2rem;
+        }
+        .restart-button {
+            font-family: 'Press Start 2P', cursive; background-color: #FFD700;
+            color: #000000; border: none; padding: 1rem 2rem; border-radius: 0.5rem;
+            font-size: clamp(1rem, 5vw, 1.2rem); cursor: pointer;
+            transition: background-color 0.3s, transform 0.1s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3); pointer-events: auto;
+        }
+        .avito-link {
+            font-family: 'Roboto Condensed', sans-serif;
+            font-size: clamp(1.2rem, 5vw, 1.8rem);
+            color: #FFD700; text-decoration: underline; margin-top: 1.5rem;
+            pointer-events: auto; display: block;
+        }
+        /* Стили для меню наград */
+        .rewards-menu {
+            font-family: 'Roboto Condensed', sans-serif;
+            overflow-y: auto;
+            padding: 2rem;
+        }
+        .rewards-menu h3 {
+            font-family: 'Press Start 2P', cursive;
+            color: #FFD700;
+            font-size: 1.5rem;
+            margin-bottom: 1rem;
+            border-bottom: 2px solid #FFD700;
+            padding-bottom: 0.5rem;
+        }
+        .rewards-section { margin-bottom: 2rem; }
+        .skin-option, .theme-option, .achievement-item {
+            background: rgba(0,0,0,0.3);
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            opacity: 0.5;
+        }
+        .skin-option.unlocked, .theme-option.unlocked, .achievement-item.unlocked {
+            opacity: 1;
+        }
+        .skin-option.selected, .theme-option.selected {
+            border: 2px solid #FFD700;
+            box-shadow: 0 0 10px #FFD700;
+        }
+        .skin-option.unlocked:not(.selected) { cursor: pointer; }
+        .theme-option.unlocked:not(.selected) { cursor: pointer; }
+        .achievement-item .check { color: #4ade80; }
+        .reward-screen .promo-code {
+            font-family: 'Press Start 2P', cursive;
+            background: #111;
+            padding: 1rem;
+            border: 2px dashed #FFD700;
+            border-radius: 0.5rem;
+            font-size: clamp(1rem, 5vw, 1.5rem);
+            color: #4ade80; /* Зеленый */
+            margin: 1.5rem 0;
+            user-select: all;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="gameCanvas"></canvas>
+
+<div class="ui-layer">
+    <div class="info-panel" id="score-display">СЧЕТ: 0</div>
+    <div class="lives-panel" id="lives-display"></div>
+    <div class="active-bonuses-container">
+        <div id="saw-indicator" class="bonus-indicator" style="display: none;">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#C0C0C0"><path d="M22 8a1 1 0 0 0-1-1h-2.34A10.002 10.002 0 0 0 3.41 3.41a10.002 10.002 0 0 0 13.28 13.28A10.03 10.03 0 0 0 21 10.34V13a1 1 0 0 0 2 0V9a1 1 0 0 0-1-1zM12 20a8 8 0 1 1 8-8 8.009 8.009 0 0 1-8 8zm0-10a2 2 0 1 0 2 2 2.002 2.002 0 0 0-2-2z"/></svg>
+        </div>
+        <div id="drill-indicator" class="bonus-indicator" style="display: none;">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#FFD700"><path d="M21.71 11.29l-9-9a1 1 0 0 0-1.42 1.42L12.59 5H10a1 1 0 0 0-1 1v2H4a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h2v3a1 1 0 0 0 1 1h5a1 1 0 0 0 1-1v-3h1a1 1 0 0 0 1-1v-2h1.59l1.29 1.29a1 1 0 0 0 1.42-1.42zM13 18h-3v-3H7v-3h3V9h3v3h3v3h-3z"/></svg>
+        </div>
+    </div>
+    <div id="message-container" class="message-overlay" style="display: flex;">
+        <div id="start-menu">
+            <h2>DEWALT FOREVER</h2>
+            <p>Прыгайте через препятствия и собирайте инструменты!</p>
+            <button id="startButton" class="restart-button">НАЧАТЬ ИГРУ</button>
+            <button id="rewardsButton" class="restart-button" style="margin-top: 1rem; background-color: #4A90E2;">НАГРАДЫ</button>
+        </div>
+    </div>
+    <div id="rewards-menu" class="message-overlay rewards-menu" style="display: none;">
+        <!-- Содержимое будет генерироваться скриптом -->
+    </div>
+</div>
+
+
+<script>
+    // --- НАСТРОЙКИ ИГРЫ ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreDisplay = document.getElementById('score-display');
+    const livesDisplay = document.getElementById('lives-display');
+    const sawIndicator = document.getElementById('saw-indicator');
+    const drillIndicator = document.getElementById('drill-indicator');
+    const messageContainer = document.getElementById('message-container');
+    const rewardsMenu = document.getElementById('rewards-menu');
+
+    let canvasWidth, canvasHeight;
+    let score = 0, gameState = 'start', gameSpeed = 3, initialGameSpeed = 3, speedIncreaseFactor = 0.0002, frameCount = 0;
+    const MAX_LIVES = 5, INVINCIBILITY_DURATION = 120;
+    const player = {
+        x: 50, y: 0, width: 55, height: 60,
+        velocityY: 0, gravity: 0.6, jumpPower: -18,
+        isJumping: false, groundY: 0, lives: MAX_LIVES,
+        isInvincible: false, invincibilityTimer: 0, heldTool: null,
+    };
+    let obstacles = [], bonuses = [], bridges = [];
+    let obstacleSpawnTimer = 100, bonusSpawnTimer = 120;
+    let bridgeBonusReady = false;
+    let sawCharges = 1;
+    let statsThisGame = {};
+
+    // --- УПРАВЛЕНИЕ ДАННЫМИ И НАГРАДАМИ ---
+    let gameData = {};
+    const defaultGameData = {
+        highScore: 0,
+        skins: {
+            helmet: {
+                yellow: { unlocked: true, color: '#FFD700' },
+                orange: { unlocked: false, color: '#FFA500', req: 10000 },
+                gold: { unlocked: false, color: '#FFD700', req: 50000 }
+            },
+            jacket: {
+                blue: { unlocked: true, color: '#4A90E2' },
+                green: { unlocked: false, color: '#22C55E', req: 25000 },
+                gold: { unlocked: false, color: '#FFD700', req: 50000 }
+            }
+        },
+        themes: {
+            day: { unlocked: true, name: 'Дневная стройка' },
+            night: { unlocked: false, name: 'Ночная стройка', req: 100000 }
+        },
+        upgrades: {
+            doubleSaw: { unlocked: false, req: 150000 }
+        },
+        achievements: {
+            rookie: { unlocked: false, name: 'Новичок', desc: 'Набрать 5 000 очков', req: 5000 },
+            engineer: { unlocked: false, name: 'Инженер', desc: 'Построить 10 мостов за игру' },
+            destroyer: { unlocked: false, name: 'Разрушитель', desc: 'Уничтожить 10 препятствий' },
+            marathoner: { unlocked: false, name: 'Марафонец', desc: 'Продержаться 5 минут' },
+            legend: { unlocked: false, name: 'Легенда стройки', desc: 'Набрать 200 000 очков', req: 200000 }
+        },
+        realRewards: {
+            rookie: { claimed: false, code: null, req: 5000, name: 'Награда "Новичок"', prize: 'скидку 5%' },
+            master: { claimed: false, code: null, req: 50000, name: 'Награда "Мастер"', prize: 'подарок (маркер, рулетка или карандаш)' },
+            legend: { claimed: false, code: null, req: 200000, name: 'Награда "Легенда"', prize: 'ценный подарок (нож DeWalt или скидка 7%)' }
+        },
+        selected: {
+            helmet: 'yellow',
+            jacket: 'blue',
+            theme: 'day'
+        }
+    };
+
+    function loadData() {
+        const savedData = localStorage.getItem('dewaltForeverData');
+        if (savedData) {
+            gameData = JSON.parse(savedData);
+        } else {
+            gameData = JSON.parse(JSON.stringify(defaultGameData));
+        }
+    }
+
+    function saveData() {
+        localStorage.setItem('dewaltForeverData', JSON.stringify(gameData));
+    }
+    
+    function generatePromoCode() {
+        return `DEWALT-${Date.now().toString(36).slice(-4).toUpperCase()}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`;
+    }
+
+    // --- РИСОВАНИЕ ---
+    function drawPlayer() {
+        if (player.isInvincible && frameCount % 10 < 5) { return; }
+        ctx.save();
+        if (player.heldTool === 'saw') {
+            ctx.shadowColor = '#E32636'; ctx.shadowBlur = 25;
+        } else if (player.heldTool === 'drill') {
+            ctx.shadowColor = '#FFD700'; ctx.shadowBlur = 25;
+        }
+        ctx.translate(player.x, player.y - player.height);
+        
+        const isGold = gameData.selected.helmet === 'gold' && gameData.selected.jacket === 'gold';
+        ctx.fillStyle = isGold ? '#000' : gameData.skins.helmet[gameData.selected.helmet].color;
+        if (isGold) {
+            ctx.strokeStyle = gameData.skins.helmet.gold.color;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(5, 0, player.width - 10, 10);
+            ctx.strokeRect(0, 5, player.width, 5);
+        }
+        ctx.fillRect(5, 0, player.width - 10, 10); ctx.fillRect(0, 5, player.width, 5);
+
+        ctx.fillStyle = '#f0c2a2'; ctx.fillRect(10, 10, player.width - 20, 15);
+        ctx.fillStyle = gameData.skins.jacket[gameData.selected.jacket].color;
+        if (isGold) {
+            ctx.strokeStyle = gameData.skins.jacket.gold.color;
+            ctx.strokeRect(5, 25, player.width - 10, 25);
+        }
+        ctx.fillRect(5, 25, player.width - 10, 25);
+        
+        ctx.fillStyle = '#333333';
+        const legOffset = Math.sin(frameCount * 0.5) * 8;
+        ctx.fillRect(8, 50, 15, 15 - Math.max(0, legOffset/2));
+        ctx.fillRect(player.width - 23, 50, 15, 15 + Math.min(0, legOffset/2));
+        ctx.fillStyle = '#A0522D';
+        ctx.fillRect(6, 60, 19, 5); ctx.fillRect(player.width - 25, 60, 19, 5);
+        ctx.translate(player.width / 2, 35);
+        
+        if (player.heldTool) {
+            if (player.heldTool === 'saw') {
+                ctx.save(); ctx.translate(15, 0);
+                ctx.fillStyle = '#FFD700'; ctx.fillRect(10, -15, 30, 20); ctx.fillStyle = '#111111'; ctx.fillRect(30, -15, 10, 25);
+                ctx.fillStyle = '#444444'; ctx.beginPath(); ctx.arc(10, 5, 18, 0, Math.PI, false); ctx.fill();
+                ctx.fillStyle = '#C0C0C0'; ctx.beginPath(); ctx.arc(10, 5, 15, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(10, 5, 3, 0, Math.PI * 2); ctx.fill();
+                ctx.restore();
+            } else if (player.heldTool === 'drill') {
+                ctx.save(); ctx.translate(10, 0);
+                ctx.fillStyle = '#FFD700'; ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(20, -10); ctx.lineTo(25, 5); ctx.lineTo(15, 15); ctx.lineTo(5, 5); ctx.closePath(); ctx.fill();
+                ctx.fillStyle = '#111111'; ctx.fillRect(5, 5, 10, 15); ctx.fillStyle = '#333333'; ctx.fillRect(0, 20, 15, 8);
+                ctx.fillStyle = '#808080'; ctx.fillRect(-15, -2, 15, 6); ctx.fillStyle = '#C0C0C0'; ctx.fillRect(-25, 0, 10, 2);
+                ctx.restore();
+            }
+        }
+        ctx.restore();
+    }
+    
+    function drawObstacles() { obstacles.forEach(o => { if (o.type === 'brick') { ctx.fillStyle = '#A0522D'; ctx.fillRect(o.x, o.y, o.width, o.height); ctx.strokeStyle = '#69361d'; ctx.lineWidth = 2; for(let i=0;i<o.width;i+=20){ctx.beginPath();ctx.moveTo(o.x+i,o.y);ctx.lineTo(o.x+i,o.y+o.height);ctx.stroke();} for(let j=0;j<o.height;j+=20){ctx.beginPath();ctx.moveTo(o.x,o.y+j);ctx.lineTo(o.x+o.width,o.y+j);ctx.stroke();}} else { const sW=10,g=8; ctx.fillStyle='#9ca3af'; for(let i=0;i<o.width;i+=(sW+g)){ctx.fillRect(o.x+i,o.y,sW,o.height);} ctx.fillStyle='#6b7280'; ctx.fillRect(o.x,o.y+o.height*0.2,o.width,8);}}); }
+    function drawBonuses() { bonuses.forEach(b => { ctx.save(); ctx.translate(b.x, b.y); if (b.type === 'drill') { ctx.fillStyle = '#FFD700'; ctx.beginPath(); ctx.moveTo(0, 5); ctx.lineTo(30, 0); ctx.lineTo(35, 15); ctx.lineTo(25, 25); ctx.lineTo(15, 15); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#111111'; ctx.fillRect(15, 15, 10, 20); ctx.fillStyle = '#333333'; ctx.fillRect(10, 35, 20, 10); ctx.fillStyle = '#808080'; ctx.fillRect(-15, 8, 15, 6); ctx.fillStyle = '#C0C0C0'; ctx.fillRect(-25, 10, 10, 2); } else { ctx.fillStyle = '#FFD700'; ctx.fillRect(10, 0, 30, 20); ctx.fillStyle = '#111111'; ctx.fillRect(30, 0, 10, 25); ctx.fillStyle = '#444444'; ctx.beginPath(); ctx.arc(10, 20, 18, 0, Math.PI, false); ctx.fill(); ctx.fillStyle = '#C0C0C0'; ctx.beginPath(); ctx.arc(10, 20, 15, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(10, 20, 3, 0, Math.PI * 2); ctx.fill(); } ctx.restore(); }); }
+    function drawGround() { const h = canvasHeight * 0.1; ctx.fillStyle = '#5a6270'; ctx.fillRect(0, canvasHeight - h, canvasWidth, h); ctx.fillStyle = '#818a99'; ctx.fillRect(0, canvasHeight - h, canvasWidth, 5); }
+    
+    function drawBridges() {
+        bridges.forEach(bridge => {
+            ctx.fillStyle = '#855E42'; ctx.strokeStyle = '#5D4037'; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.moveTo(bridge.startX, bridge.startY); ctx.lineTo(bridge.peak1X, bridge.peakY);
+            ctx.lineTo(bridge.peak2X, bridge.peakY); ctx.lineTo(bridge.endX, bridge.endY); ctx.stroke();
+            ctx.lineWidth = 10; ctx.beginPath(); ctx.moveTo(bridge.peak1X, bridge.peakY);
+            ctx.lineTo(bridge.peak1X, bridge.startY); ctx.moveTo(bridge.peak2X, bridge.peakY);
+            ctx.lineTo(bridge.peak2X, bridge.startY); ctx.stroke();
+        });
+    }
+
+    // --- ЛОГИКА ИГРЫ ---
+    function update() {
+        if (gameState !== 'playing') return;
+        frameCount++; ctx.clearRect(0, 0, canvasWidth, canvasHeight); drawGround();
+        handlePlayerPlatforming();
+        player.velocityY += player.gravity; player.y += player.velocityY;
+        if (player.y > player.groundY) { player.y = player.groundY; player.velocityY = 0; player.isJumping = false; }
+        spawnObjects(); tryToBuildBridge(); 
+        updateAndDrawObjects(obstacles, 'obstacle'); updateAndDrawObjects(bonuses, 'bonus'); updateAndDrawObjects(bridges, 'bridge');
+        handleTimers(); drawPlayer(); checkCollisions();
+        gameSpeed += speedIncreaseFactor; 
+        score++; // ИЗМЕНЕНО: Возвращено начисление очков за время
+        updateUI();
+        requestAnimationFrame(update);
+    }
+    
+    function updateAndDrawObjects(objectArray, type) { 
+        for (let i = objectArray.length - 1; i >= 0; i--) { 
+            let obj = objectArray[i]; 
+            if (type === 'bridge') {
+                obj.startX -= gameSpeed; obj.peak1X -= gameSpeed; obj.peak2X -= gameSpeed; obj.endX -= gameSpeed;
+                if (obj.endX < 0) { objectArray.splice(i, 1); }
+            } else {
+                obj.x -= gameSpeed; 
+                if (obj.x + obj.width < 0) { objectArray.splice(i, 1); } 
+            }
+        } 
+        if(type === 'obstacle') drawObstacles(); 
+        else if (type === 'bonus') drawBonuses();
+        else if (type === 'bridge') drawBridges();
+    }
+    
+    function handleTimers() {
+        if (player.isInvincible) {
+            player.invincibilityTimer--;
+            if (player.invincibilityTimer <= 0) { player.isInvincible = false; }
+        }
+    }
+    
+    function handlePlayerPlatforming() {
+        let onPlatform = false;
+        const playerCenterX = player.x + player.width / 2;
+        const defaultGround = canvasHeight - (canvasHeight * 0.1);
+
+        for (const bridge of bridges) {
+            if (playerCenterX > bridge.startX && playerCenterX < bridge.endX) {
+                let platformY;
+                if (playerCenterX < bridge.peak1X) {
+                    const slope = (bridge.peakY - bridge.startY) / (bridge.peak1X - bridge.startX);
+                    platformY = bridge.startY + slope * (playerCenterX - bridge.startX);
+                } else if (playerCenterX < bridge.peak2X) {
+                    platformY = bridge.peakY;
+                } else {
+                    const slope = (bridge.endY - bridge.peakY) / (bridge.endX - bridge.peak2X);
+                    platformY = bridge.peakY + slope * (playerCenterX - bridge.peak2X);
+                }
+                if (player.velocityY >= 0 && player.y >= platformY - 10) {
+                    player.groundY = platformY;
+                    onPlatform = true;
+                    if (player.heldTool === 'drill') { player.heldTool = null; }
+                    break;
+                }
+            }
+        }
+        player.onBridge = onPlatform;
+        if (!onPlatform) { player.groundY = defaultGround; }
+    }
+
+    function updateUI() {
+        scoreDisplay.textContent = `СЧЕТ: ${Math.floor(score)}`;
+        livesDisplay.textContent = '❤️'.repeat(player.lives);
+        sawIndicator.style.display = player.heldTool === 'saw' ? 'flex' : 'none';
+        drillIndicator.style.display = bridgeBonusReady ? 'flex' : 'none';
+    }
+
+    function spawnObjects() {
+        obstacleSpawnTimer--;
+        if (obstacleSpawnTimer <= 0) {
+            let h = Math.random() * (canvasHeight * 0.08) + (canvasHeight * 0.04);
+            obstacles.push({ x: canvasWidth, y: canvasHeight - h - (canvasHeight * 0.1), width: Math.random() * 40 + 40, height: h, type: Math.random() > 0.5 ? 'brick' : 'fence', hasBridge: false });
+            obstacleSpawnTimer = Math.max(120, 300 - gameSpeed * 10); 
+        }
+        bonusSpawnTimer--;
+        if (bonusSpawnTimer <= 0) {
+            bonuses.push({x: canvasWidth, y: canvasHeight-(Math.random()*(canvasHeight*0.3)+(canvasHeight*0.2)), width: 50, height: 50, type: Math.random() > 0.5 ? 'drill' : 'saw'});
+            bonusSpawnTimer = Math.random() * 400 + 500;
+        }
+    }
+
+    function tryToBuildBridge() {
+        if (!bridgeBonusReady) return;
+        const nextObstacle = obstacles.find(o => o.x > player.x + player.width && !o.hasBridge);
+        if (nextObstacle) {
+            const rampWidth = 80;
+            const groundLevel = canvasHeight - (canvasHeight * 0.1);
+            const bridgeLevel = nextObstacle.y - 20;
+            bridges.push({ startX: nextObstacle.x - rampWidth, startY: groundLevel, peak1X: nextObstacle.x, peakY: bridgeLevel, peak2X: nextObstacle.x + nextObstacle.width, endX: nextObstacle.x + nextObstacle.width + rampWidth, endY: groundLevel });
+            nextObstacle.hasBridge = true;
+            bridgeBonusReady = false;
+        }
+    }
+
+    function checkCollisions() {
+        if (!player.isInvincible) {
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                let obstacle = obstacles[i];
+                if (!obstacle.hasBridge && player.x < obstacle.x + obstacle.width && player.x + player.width > obstacle.x && player.y > obstacle.y) {
+                    if (player.heldTool === 'saw') {
+                        obstacles.splice(i, 1);
+                        statsThisGame.sawsUsed++;
+                        sawCharges--;
+                        if (sawCharges <= 0) { player.heldTool = null; }
+                    } else {
+                        player.lives--;
+                        if (player.lives <= 0) { endGame(); } 
+                        else { player.isInvincible = true; player.invincibilityTimer = INVINCIBILITY_DURATION; }
+                    }
+                    return;
+                }
+            }
+        }
+        for (let i = bonuses.length - 1; i >= 0; i--) {
+            let bonus = bonuses[i];
+            if (player.x < bonus.x + bonus.width && player.x + player.width > bonus.x && player.y - player.height < bonus.y + bonus.height && player.y > bonus.y) {
+                score += 1000;
+                if (bonus.type === 'drill') { 
+                    bridgeBonusReady = true;
+                    player.heldTool = 'drill';
+                    statsThisGame.bridgesBuilt++;
+                } 
+                else { 
+                    player.heldTool = 'saw';
+                    sawCharges = gameData.upgrades.doubleSaw.unlocked ? 2 : 1;
+                }
+                bonuses.splice(i, 1);
+            }
+        }
+    }
+
+    function jump() {
+        if (!player.isJumping && gameState === 'playing') { player.velocityY = player.jumpPower; player.isJumping = true; }
+    }
+
+    // --- УПРАВЛЕНИЕ ИГРОЙ И МЕНЮ ---
+    function startGame() {
+        score = 0; gameSpeed = initialGameSpeed; frameCount = 0;
+        obstacles = []; bonuses = []; bridges = [];
+        bridgeBonusReady = false;
+        player.lives = MAX_LIVES;
+        player.isInvincible = false; player.invincibilityTimer = 0;
+        player.heldTool = null;
+        player.y = player.groundY; player.velocityY = 0; player.isJumping = false;
+        statsThisGame = { bridgesBuilt: 0, sawsUsed: 0, startTime: Date.now() };
+        gameState = 'playing';
+        messageContainer.style.display = 'none';
+        applyTheme();
+        update();
+    }
+    
+    function endGame() {
+        gameState = 'gameOver';
+        checkUnlocks();
+        
+        const rewardTiers = Object.keys(gameData.realRewards).sort((a, b) => gameData.realRewards[b].req - gameData.realRewards[a].req);
+        let newReward = null;
+        for (const tier of rewardTiers) {
+            if (score >= gameData.realRewards[tier].req && !gameData.realRewards[tier].claimed) {
+                newReward = tier;
+                break;
+            }
+        }
+
+        if (newReward) {
+            showRewardScreen(newReward);
+        } else {
+            showGameOverScreen();
+        }
+    }
+    
+    function checkUnlocks() {
+        if (score > gameData.highScore) { gameData.highScore = Math.floor(score); }
+        
+        for (const key in gameData.skins.helmet) { if (gameData.highScore >= gameData.skins.helmet[key].req) gameData.skins.helmet[key].unlocked = true; }
+        for (const key in gameData.skins.jacket) { if (gameData.highScore >= gameData.skins.jacket[key].req) gameData.skins.jacket[key].unlocked = true; }
+        for (const key in gameData.themes) { if (gameData.highScore >= gameData.themes[key].req) gameData.themes[key].unlocked = true; }
+        for (const key in gameData.upgrades) { if (gameData.highScore >= gameData.upgrades[key].req) gameData.upgrades[key].unlocked = true; }
+        
+        if (gameData.highScore >= gameData.achievements.rookie.req) gameData.achievements.rookie.unlocked = true;
+        if (gameData.highScore >= gameData.achievements.legend.req) gameData.achievements.legend.unlocked = true;
+        if (statsThisGame.bridgesBuilt >= 10) gameData.achievements.engineer.unlocked = true;
+        if (statsThisGame.sawsUsed >= 10) gameData.achievements.destroyer.unlocked = true;
+        if ((Date.now() - statsThisGame.startTime) / 1000 >= 300) gameData.achievements.marathoner.unlocked = true;
+
+        saveData();
+    }
+
+    function showRewardScreen(tier) {
+        const reward = gameData.realRewards[tier];
+        reward.claimed = true;
+        reward.code = generatePromoCode();
+        saveData();
+
+        messageContainer.innerHTML = `<div class="reward-screen"><h2>ПОЗДРАВЛЯЕМ!</h2><p>Вы открыли: ${reward.name} и получаете ${reward.prize}!</p><p>Ваш уникальный промокод:</p><div class="promo-code">${reward.code}</div><p style="font-size: 1rem;">Сделайте скриншот и отправьте нам в Avito, чтобы получить награду!</p><button id="continueButton" class="restart-button" style="margin-top: 2rem;">ПРОДОЛЖИТЬ</button></div>`;
+        messageContainer.style.display = 'flex';
+        document.getElementById('continueButton').addEventListener('click', showGameOverScreen);
+    }
+
+    function showGameOverScreen() {
+        messageContainer.innerHTML = `<div><h2 style="font-family: 'Roboto Condensed', sans-serif; font-size: clamp(1.5rem, 6vw, 2.5rem); line-height: 1.2;">Покупай инструмент в магазине DeWalt forever на Avito</h2><a href="https://www.avito.ru/brands/dewaltforever" target="_blank" class="avito-link">Перейти в магазин</a><button id="restartButton" class="restart-button" style="margin-top: 2rem;">ИГРАТЬ СНОВА</button></div>`;
+        messageContainer.style.display = 'flex';
+        document.getElementById('restartButton').addEventListener('click', () => {
+             messageContainer.style.display = 'none';
+             openStartMenu();
+        });
+    }
+
+    function openStartMenu() {
+        messageContainer.innerHTML = `<div id="start-menu"><h2>DEWALT FOREVER</h2><p>Прыгайте через препятствия и собирайте инструменты!</p><button id="startButton" class="restart-button">НАЧАТЬ ИГРУ</button><button id="rewardsButton" class="restart-button" style="margin-top: 1rem; background-color: #4A90E2;">НАГРАДЫ</button></div>`;
+        messageContainer.style.display = 'flex';
+        document.getElementById('startButton').addEventListener('click', startGame);
+        document.getElementById('rewardsButton').addEventListener('click', openRewardsMenu);
+    }
+
+    function openRewardsMenu() {
+        let content = `
+            <div style="width: 100%; max-width: 600px; text-align: left;">
+                <div class="rewards-section">
+                    <h3>Скины</h3>
+                    <p>Каска (Рекорд: ${gameData.highScore})</p>
+                    ${Object.keys(gameData.skins.helmet).map(key => `
+                        <div class="skin-option ${gameData.skins.helmet[key].unlocked ? 'unlocked' : ''} ${gameData.selected.helmet === key ? 'selected' : ''}" onclick="selectSkin('helmet', '${key}')">
+                            <span>${key === 'yellow' ? 'Стандартная' : key === 'orange' ? 'Оранжевая' : 'Золотая'} ${gameData.skins.helmet[key].req ? `(${gameData.skins.helmet[key].req} очков)` : ''}</span>
+                            ${gameData.skins.helmet[key].unlocked ? '✔️' : '🔒'}
+                        </div>
+                    `).join('')}
+                    <p style="margin-top: 1rem;">Куртка</p>
+                    ${Object.keys(gameData.skins.jacket).map(key => `
+                        <div class="skin-option ${gameData.skins.jacket[key].unlocked ? 'unlocked' : ''} ${gameData.selected.jacket === key ? 'selected' : ''}" onclick="selectSkin('jacket', '${key}')">
+                            <span>${key === 'blue' ? 'Стандартная' : key === 'green' ? 'Зеленая' : 'Золотая'} ${gameData.skins.jacket[key].req ? `(${gameData.skins.jacket[key].req} очков)` : ''}</span>
+                            ${gameData.skins.jacket[key].unlocked ? '✔️' : '🔒'}
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="rewards-section">
+                    <h3>Темы</h3>
+                     ${Object.keys(gameData.themes).map(key => `
+                        <div class="theme-option ${gameData.themes[key].unlocked ? 'unlocked' : ''} ${gameData.selected.theme === key ? 'selected' : ''}" onclick="selectTheme('${key}')">
+                            <span>${gameData.themes[key].name} ${gameData.themes[key].req ? `(${gameData.themes[key].req} очков)` : ''}</span>
+                            ${gameData.themes[key].unlocked ? '✔️' : '🔒'}
+                        </div>
+                    `).join('')}
+                </div>
+                <div class="rewards-section">
+                    <h3>Достижения</h3>
+                    ${Object.values(gameData.achievements).map(ach => `
+                        <div class="achievement-item ${ach.unlocked ? 'unlocked' : ''}">
+                            <span><b>${ach.name}:</b> ${ach.desc}</span>
+                            <span class="check">${ach.unlocked ? '✔️' : '🔒'}</span>
+                        </div>
+                    `).join('')}
+                </div>
+                <button id="backButton" class="restart-button" style="width: 100%;">НАЗАД</button>
+            </div>
+        `;
+        rewardsMenu.innerHTML = content;
+        rewardsMenu.style.display = 'flex';
+        messageContainer.style.display = 'none';
+        document.getElementById('backButton').addEventListener('click', closeRewardsMenu);
+    }
+    
+    function closeRewardsMenu() {
+        rewardsMenu.style.display = 'none';
+        openStartMenu();
+    }
+    
+    window.selectSkin = function(type, key) {
+        if (gameData.skins[type][key].unlocked) {
+            if (key === 'gold') {
+                gameData.selected.helmet = 'gold';
+                gameData.selected.jacket = 'gold';
+            } else {
+                gameData.selected[type] = key;
+                if (gameData.selected.helmet === 'gold' || gameData.selected.jacket === 'gold') {
+                    gameData.selected.helmet = gameData.selected.helmet === 'gold' ? 'yellow' : gameData.selected.helmet;
+                    gameData.selected.jacket = gameData.selected.jacket === 'gold' ? 'blue' : gameData.selected.jacket;
+                }
+            }
+            saveData();
+            openRewardsMenu();
+        }
+    }
+
+    window.selectTheme = function(key) {
+        if (gameData.themes[key].unlocked) {
+            gameData.selected.theme = key;
+            saveData();
+            openRewardsMenu();
+        }
+    }
+
+    function applyTheme() {
+        if (gameData.selected.theme === 'night') {
+            canvas.style.backgroundColor = '#082f49'; // Темно-синий
+        } else {
+            canvas.style.backgroundColor = '#4a5568'; // Стандартный серый
+        }
+    }
+
+    // --- АДАПТИВНОСТЬ И ЗАПУСК ---
+    function resizeCanvas() {
+        canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+        canvasWidth = canvas.width; canvasHeight = canvas.height;
+        const groundHeight = canvasHeight * 0.1;
+        player.groundY = canvasHeight - groundHeight;
+        if (gameState !== 'playing') { player.y = player.groundY; }
+        if (gameState !== 'playing') {
+            ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+            drawGround();
+            drawPlayer();
+        }
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    function handleInteraction(e) { e.preventDefault(); if (gameState === 'playing') { jump(); } }
+    document.body.addEventListener('touchstart', handleInteraction);
+    window.addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); if (gameState === 'playing') jump(); } });
+    
+    // Инициализация
+    loadData();
+    resizeCanvas();
+    openStartMenu();
+
+</script>
+
+</body>
+</html>
+
